@@ -31,9 +31,24 @@ from pydub import AudioSegment
 import time
 
 # load model weights
-audio_processor,vae,unet,pe  = load_all_model()
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-timesteps = torch.tensor([0], device=device)
+# audio_processor,vae,unet,pe  = load_all_model()
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# timesteps = torch.tensor([0], device=device)
+
+class MuseTalkModelLoader:
+    @classmethod
+    def INPUT_TYPE(cls):
+        return {}
+
+    RETURN_TYPES = ("MUSETALK",)
+    FUNCTION = "run"
+    CATEGORY = "MuseTalk"
+    
+    def run(self):
+        audio_processor,vae,unet,pe  = load_all_model()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        timesteps = torch.tensor([0], device=device)
+        return ({'processor': audio_processor,'vae': vae, 'unet': unet,'pe': pe, 'timesteps': timesteps})
 
 class MuseTalkCupAudio:
     @classmethod
@@ -66,6 +81,7 @@ class MuseTalkRun:
                 "audio_path":("STRING",{"default":""}),
                 "bbox_shift":("INT",{"default":0}),
                 "batch_size":("INT",{"default":8}),
+                "pipe": ("MUSETALK", )
             },
         }
 
@@ -73,7 +89,7 @@ class MuseTalkRun:
     FUNCTION = "run"
     CATEGORY = "MuseTalk"
 
-    def run(self, video_path,audio_path,bbox_shift,batch_size):
+    def run(self, video_path,audio_path,bbox_shift,batch_size, pipe):
         parser = argparse.ArgumentParser()
         parser.add_argument("--bbox_shift",type=int, default=bbox_shift)
         parser.add_argument("--result_dir", default=f'{comfy_path}/output', help="path to output")
@@ -94,6 +110,8 @@ class MuseTalkRun:
         crop_coord_save_path = os.path.join(args.result_dir, input_basename+".pkl") # only related to video input
         result_img_save_path = os.path.join(args.result_dir, output_basename) # related to video & audio inputs
         os.makedirs(result_img_save_path,exist_ok =True)
+        
+        audio_processor,vae,unet,pe, timesteps = pipe['processor'], pipe['vae'], pipe['unet'], pipe['pe'], pipe['timesteps']
         
         if args.output_vid_name=="":
             output_vid_name = os.path.join(args.result_dir, output_basename+".mp4")
@@ -204,6 +222,7 @@ class VHS_FILENAMES_STRING_MuseTalk:
     
 NODE_CLASS_MAPPINGS = {
     "MuseTalkRun":MuseTalkRun,
+    "MuseTalkModelLoader": MuseTalkModelLoader,
     "VHS_FILENAMES_STRING_MuseTalk":VHS_FILENAMES_STRING_MuseTalk,
     "MuseTalkCupAudio":MuseTalkCupAudio,
 }
