@@ -26,6 +26,9 @@ from musetalk.utils.utils import get_file_type,get_video_fps,datagen
 from musetalk.utils.preprocessing import get_landmark_and_bbox,read_imgs,coord_placeholder
 from musetalk.utils.blending import get_image
 from musetalk.utils.utils import load_all_model
+from musetalk.whisper.audio2feature import Audio2Feature
+from musetalk.models.vae import VAE
+from musetalk.models.unet import UNet,PositionalEncoding
 
 from pydub import AudioSegment
 import time
@@ -35,20 +38,34 @@ import time
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # timesteps = torch.tensor([0], device=device)
 
+class MuseTalkModel:
+    def __init__(self, processor:Audio2Feature, vae: VAE, unet: UNet, pe: PositionalEncoding, device:str):
+        if device == "CUDA" and not torch.cuda.is_available():
+            raise RuntimeError("not support cuda")
+            
+        dev = torch.device(device.lower())
+        self.processor = processor
+        self.unet = unet
+        self.pe = pe
+        self.vae = vae
+        self.timesteps = torch.tensor([0], device=dev)
+    
 class MuseTalkModelLoader:
     @classmethod
-    def INPUT_TYPE(cls):
-        return {}
+    def INPUT_TYPES(cls):
+        return {\
+            "required": {
+                "device": (["CUDA", "CPU"], ),
+            },
+        }
 
     RETURN_TYPES = ("MUSETALK",)
-    FUNCTION = "run"
+    FUNCTION = "load_model"
     CATEGORY = "MuseTalk"
     
-    def run(self):
+    def load_model(self, device):
         audio_processor,vae,unet,pe  = load_all_model()
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        timesteps = torch.tensor([0], device=device)
-        return ({'processor': audio_processor,'vae': vae, 'unet': unet,'pe': pe, 'timesteps': timesteps})
+        return (MuseTalkModel(audio_processor, vae, unet, pe, device), )
 
 class MuseTalkCupAudio:
     @classmethod
@@ -81,7 +98,7 @@ class MuseTalkRun:
                 "audio_path":("STRING",{"default":""}),
                 "bbox_shift":("INT",{"default":0}),
                 "batch_size":("INT",{"default":8}),
-                "pipe": ("MUSETALK", )
+                "musetalk": ("MUSETALK", )
             },
         }
 
@@ -89,7 +106,7 @@ class MuseTalkRun:
     FUNCTION = "run"
     CATEGORY = "MuseTalk"
 
-    def run(self, video_path,audio_path,bbox_shift,batch_size, pipe):
+    def run(self, video_path,audio_path,bbox_shift,batch_size, musetalk):
         parser = argparse.ArgumentParser()
         parser.add_argument("--bbox_shift",type=int, default=bbox_shift)
         parser.add_argument("--result_dir", default=f'{comfy_path}/output', help="path to output")
@@ -111,7 +128,7 @@ class MuseTalkRun:
         result_img_save_path = os.path.join(args.result_dir, output_basename) # related to video & audio inputs
         os.makedirs(result_img_save_path,exist_ok =True)
         
-        audio_processor,vae,unet,pe, timesteps = pipe['processor'], pipe['vae'], pipe['unet'], pipe['pe'], pipe['timesteps']
+        audio_processor,vae,unet,pe, timesteps = musetalk.processor, musetalk.vae, musetalk.unet, musetalk.pe, musetalk.timesteps
         
         if args.output_vid_name=="":
             output_vid_name = os.path.join(args.result_dir, output_basename+".mp4")
