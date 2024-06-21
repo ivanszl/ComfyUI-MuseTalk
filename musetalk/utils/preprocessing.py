@@ -25,14 +25,22 @@ MuseVCheckPointDir = os.path.join(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 config_file = f'{comfy_path}/custom_nodes/ComfyUI-MuseTalk/musetalk/utils/dwpose/rtmpose-l_8xb32-270e_coco-ubody-wholebody-384x288.py'
 checkpoint_file = f'{MuseVCheckPointDir}/dwpose/dw-ll_ucoco_384.pth'
-model = init_model(config_file, checkpoint_file, device=device)
+#model = init_model(config_file, checkpoint_file, device=device)
+model = None
 
 # initialize the face detection model
 device = "cuda" if torch.cuda.is_available() else "cpu"
-fa = FaceAlignment(LandmarksType._2D, flip_input=False,device=device)
+#fa = FaceAlignment(LandmarksType._2D, flip_input=False,device=device)
+fa = None
 
 # maker if the bbox is not sufficient 
 coord_placeholder = (0.0,0.0,0.0,0.0)
+
+def load_model():
+    if not model:
+        model = init_model(config_file, checkpoint_file, device=device)
+    if not fa:
+        fa = FaceAlignment(LandmarksType._2D, flip_input=False,device=device)
 
 def resize_landmark(landmark, w, h, new_w, new_h):
     w_ratio = new_w / w
@@ -63,6 +71,7 @@ def get_landmark_and_bbox_frames(frames,upperbondrange =0):
     average_range_minus = []
     average_range_plus = []
     pbar = comfy.utils.ProgressBar(len(batches))
+    load_model()
     for fb in tqdm(batches):
         results = inference_topdown(model, np.asarray(fb)[0])
         results = merge_data_samples(results)
@@ -119,6 +128,7 @@ def get_landmark_and_bbox(img_list,upperbondrange =0):
     average_range_minus = []
     average_range_plus = []
     pbar = comfy.utils.ProgressBar(len(batches))
+    load_model()
     for fb in tqdm(batches):
         results = inference_topdown(model, np.asarray(fb)[0])
         results = merge_data_samples(results)
